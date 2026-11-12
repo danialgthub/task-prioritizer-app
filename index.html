@@ -1,0 +1,606 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Desk Hours Picker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column on phones; on wide screens a main column (top pick + ranked list) beside a sidebar (day plan, add task, weights). */
+:root {
+  --bg: #EDF1F3;
+  --surface: #FFFFFF;
+  --surface-2: #F3F6F8;
+  --ink: #13222B;
+  --muted: #55656F;
+  --line: #D5DEE3;
+  --accent: #0B6E8A;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #D6EBF2;
+  --warn: #8A4B05;
+  --warn-bg: #FBE9D0;
+  --good: #1F7A4D;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E181E; --surface: #15242C; --surface-2: #1B2E38; --ink: #E4EDF1; --muted: #93A5AF;
+    --line: #29414D; --accent: #55C2E0; --accent-ink: #06222B; --accent-soft: #1B3A46;
+    --warn: #F0B968; --warn-bg: #3A2A12; --good: #6CCB9A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E181E; --surface: #15242C; --surface-2: #1B2E38; --ink: #E4EDF1; --muted: #93A5AF;
+  --line: #29414D; --accent: #55C2E0; --accent-ink: #06222B; --accent-soft: #1B3A46;
+  --warn: #F0B968; --warn-bg: #3A2A12; --good: #6CCB9A; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 24px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: 0.005em; }
+p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+.top h1 { font-size: 1.9rem; line-height: 1.1; }
+.top .date { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+.lede { color: var(--muted); max-width: 62ch; margin-top: 6px; }
+
+.layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 920px) { .layout { grid-template-columns: minmax(0, 1fr) 340px; } }
+.col { display: grid; gap: 24px; min-width: 0; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+.panel > h2 { font-size: 1.15rem; margin-bottom: 4px; }
+.sub { color: var(--muted); font-size: 0.85rem; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+
+.banner { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+  background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; font-size: 0.88rem; }
+.banner[hidden] { display: none !important; }
+
+/* Top pick */
+.pick { background: var(--accent); color: var(--accent-ink); border-radius: 12px; padding: 20px; display: grid; gap: 14px; }
+.pick .eyebrow { color: inherit; opacity: 0.8; }
+.pick-grid { display: grid; gap: 14px 24px; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.pick h2 { font-size: 1.6rem; line-height: 1.15; margin-top: 4px; }
+.bigpct { font-family: var(--font-display); font-weight: 600; font-size: 3.6rem; line-height: 0.9; text-align: right; font-variant-numeric: tabular-nums; }
+.bigpct span { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 6px; opacity: 0.85; }
+.reasons { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.reasons li { padding-left: 18px; position: relative; }
+.reasons li::before { content: "+"; position: absolute; left: 0; font-family: var(--font-mono); }
+.reasons li.gap::before { content: "–"; }
+.reasons li.gap { opacity: 0.85; }
+.pick-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); padding-top: 12px; font-size: 0.88rem; }
+@media (max-width: 480px) { .pick-grid { grid-template-columns: 1fr; } .bigpct { text-align: left; order: -1; } }
+
+/* Buttons */
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; cursor: pointer; font-weight: 500; font-size: 0.88rem; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.on-pick { background: transparent; color: inherit; border-color: color-mix(in srgb, currentColor 55%, transparent); }
+.btn.on-pick:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.btn.danger { color: var(--warn); }
+.btn.small { padding: 4px 10px; font-size: 0.8rem; }
+
+/* Ranked list */
+.list-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; align-items: baseline; margin-bottom: 8px; }
+ol.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 6px 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.rank { font-family: var(--font-mono); font-size: 0.85rem; width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--muted); }
+.row.first .rank { background: var(--accent); color: var(--accent-ink); }
+.titleline { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.name { font-weight: 600; overflow-wrap: anywhere; }
+.chip { font-family: var(--font-mono); font-size: 0.7rem; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.chip.urgent { background: var(--warn-bg); color: var(--warn); }
+.chip.done { background: var(--accent-soft); color: var(--good); }
+.pct { font-family: var(--font-display); font-weight: 600; font-size: 1.7rem; line-height: 1; font-variant-numeric: tabular-nums; text-align: right; }
+.pct small { font-size: 0.9rem; color: var(--muted); }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); margin-top: 8px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.why { margin-top: 6px; background: none; border: 0; padding: 0; color: var(--accent); font-size: 0.82rem; font-weight: 500; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.detail { grid-column: 2 / -1; display: grid; gap: 12px; padding: 10px 0 2px; }
+.detail[hidden] { display: none !important; }
+.detail .reasons li::before { color: var(--accent); }
+.detail .reasons li.gap::before { color: var(--warn); }
+.fb { display: grid; gap: 6px; }
+.fb div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 5.5rem; gap: 10px; align-items: center; font-size: 0.8rem; }
+.fb .track { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.fb .track i { display: block; height: 100%; background: var(--accent); opacity: 0.75; }
+.fb .num { font-family: var(--font-mono); font-size: 0.75rem; text-align: right; color: var(--muted); white-space: nowrap; }
+@media (max-width: 480px) { .fb div { grid-template-columns: 6rem minmax(0, 1fr) 4.6rem; gap: 8px; } }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.row.isdone .name { text-decoration: line-through; color: var(--muted); }
+.row.isdone .rank { background: var(--accent-soft); color: var(--good); }
+.sep { margin: 14px 0 4px; }
+.empty { padding: 20px 0 6px; color: var(--muted); }
+
+/* Day plan */
+.plan { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.plan li { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 10px; align-items: start; font-size: 0.85rem; }
+.plan .t { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); padding-top: 9px; }
+.plan .b { border-radius: 6px; padding: 7px 10px; background: var(--accent-soft); min-width: 0; overflow-wrap: anywhere; }
+.plan .b small { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 0.7rem; }
+.plan .lunch .b { background: var(--surface-2); color: var(--muted); }
+.plan .free .b { background: repeating-linear-gradient(135deg, transparent 0 7px, var(--line) 7px 8px); border: 1px dashed var(--line); font-weight: 500; }
+.nofit { margin-top: 10px; font-size: 0.82rem; color: var(--warn); }
+.summary { margin-top: 10px; font-size: 0.85rem; }
+
+/* Form */
+form { display: grid; gap: 12px; margin-top: 10px; }
+label { font-size: 0.82rem; font-weight: 500; display: block; margin-bottom: 4px; }
+.opt { color: var(--muted); font-weight: 400; }
+input[type="text"], input[type="number"], input[type="date"], select {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hint { color: var(--muted); font-size: 0.75rem; font-weight: 400; }
+.slider { display: grid; grid-template-columns: minmax(0, 1fr) 1.8rem; gap: 4px 10px; align-items: center; }
+.slider label { grid-column: 1 / -1; margin: 0; }
+.slider output { font-family: var(--font-mono); font-size: 0.85rem; text-align: right; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.wrow { display: grid; grid-template-columns: minmax(0, 1fr) 3rem; gap: 2px 10px; align-items: center; }
+.wrow label { grid-column: 1 / -1; margin: 0; }
+.wrow output { font-family: var(--font-mono); font-size: 0.8rem; text-align: right; }
+details.weights summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+details.weights[open] summary { margin-bottom: 4px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="top">
+      <h1>Desk Hours Picker</h1>
+      <span class="date" id="today-label"></span>
+    </div>
+    <p class="lede">Add the tasks on your plate, including your certificate study. The picker scores each one, shows the benefit % and says why, then fits the best ones into 9am to 6pm so you can see how many hours are free for study.</p>
+  </header>
+
+  <div class="banner" id="examples-banner" hidden>
+    <span>These are example tasks so you can see how it works. Replace them with your own.</span>
+    <button class="btn small" id="clear-examples" type="button">Clear examples</button>
+  </div>
+
+  <div class="layout">
+    <main class="col" id="main-col">
+      <section id="pick"></section>
+      <section class="panel" aria-labelledby="rank-h">
+        <div class="list-head">
+          <h2 id="rank-h">Ranked tasks</h2>
+          <span class="sub">Benefit % = how much of the best possible payoff a task gives, using your weights.</span>
+        </div>
+        <ol class="rows" id="rows"></ol>
+        <div id="done-wrap" hidden>
+          <p class="eyebrow sep">Done</p>
+          <ol class="rows" id="done-rows"></ol>
+        </div>
+      </section>
+    </main>
+
+    <aside class="col">
+      <section class="panel" aria-labelledby="plan-h">
+        <h2 id="plan-h">Plan for 9am to 6pm</h2>
+        <p class="sub">Tasks go in ranked order. Lunch is 1pm to 2pm.</p>
+        <p class="summary" id="plan-summary"></p>
+        <ul class="plan" id="plan"></ul>
+        <p class="nofit" id="nofit" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="form-title">
+        <h2 id="form-title">Add a task</h2>
+        <form id="task-form" novalidate>
+          <div>
+            <label for="f-name">Task</label>
+            <input id="f-name" type="text" placeholder="e.g. Add CSV export to timesheet" autocomplete="off">
+          </div>
+          <div class="two">
+            <div>
+              <label for="f-type">Type</label>
+              <select id="f-type">
+                <option>Internship</option>
+                <option>Certificate</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="f-hours">Hours needed</label>
+              <input id="f-hours" type="number" min="0.25" max="8" step="0.25" value="2">
+            </div>
+          </div>
+          <div>
+            <label for="f-due">Due date <span class="opt">(optional)</span></label>
+            <input id="f-due" type="date">
+          </div>
+          <div class="slider">
+            <label for="f-impact">Impact <span class="hint">How much your internship result or exam score changes</span></label>
+            <input id="f-impact" type="range" min="1" max="5" value="3"><output for="f-impact">3</output>
+          </div>
+          <div class="slider">
+            <label for="f-skill">Skill growth <span class="hint">How much you learn that you will reuse</span></label>
+            <input id="f-skill" type="range" min="1" max="5" value="3"><output for="f-skill">3</output>
+          </div>
+          <div class="slider">
+            <label for="f-unblock">Unblocks others <span class="hint">How much other people or tasks wait on it</span></label>
+            <input id="f-unblock" type="range" min="1" max="5" value="1"><output for="f-unblock">1</output>
+          </div>
+          <p class="hint" id="form-error" role="alert" hidden style="color: var(--warn)">Give the task a name first.</p>
+          <div class="acts">
+            <button class="btn primary" id="f-submit" type="submit">Add task</button>
+            <button class="btn" id="f-cancel" type="button" hidden>Cancel edit</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <details class="weights">
+          <summary>What matters most</summary>
+          <p class="sub">Raise a slider to make that factor count more. The list re-ranks as you move them.</p>
+          <form id="weights-form" onsubmit="return false" style="margin-top: 12px">
+            <div class="wrow"><label for="w-urgency">Deadline</label><input id="w-urgency" type="range" min="0" max="10" value="3"><output for="w-urgency"></output></div>
+            <div class="wrow"><label for="w-impact">Impact</label><input id="w-impact" type="range" min="0" max="10" value="3"><output for="w-impact"></output></div>
+            <div class="wrow"><label for="w-skill">Skill growth</label><input id="w-skill" type="range" min="0" max="10" value="2"><output for="w-skill"></output></div>
+            <div class="wrow"><label for="w-unblock">Unblocks others</label><input id="w-unblock" type="range" min="0" max="10" value="1"><output for="w-unblock"></output></div>
+            <div class="wrow"><label for="w-quick">Quick win (fewer hours)</label><input id="w-quick" type="range" min="0" max="10" value="1"><output for="w-quick"></output></div>
+            <div class="acts"><button class="btn small" id="w-reset" type="button">Reset weights</button></div>
+          </form>
+        </details>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = 'desk-hours-picker-v1';
+  var DEFAULT_W = { urgency: 3, impact: 3, skill: 2, unblock: 1, quick: 1 };
+  var LABELS = { urgency: 'Deadline', impact: 'Impact', skill: 'Skill growth', unblock: 'Unblocks others', quick: 'Quick win' };
+  var KEYS = ['urgency', 'impact', 'skill', 'unblock', 'quick'];
+
+  var state = { tasks: [], weights: Object.assign({}, DEFAULT_W), examples: false };
+  var editingId = null;
+  var openIds = {};
+
+  /* ---------- dates ---------- */
+  function startOfToday() { var d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function isoPlus(n) { var d = startOfToday(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function daysUntil(str) {
+    if (!str) return null;
+    var p = str.split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return Math.round((d - startOfToday()) / 86400000);
+  }
+
+  /* ---------- storage ---------- */
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && Array.isArray(s.tasks)) {
+          state.tasks = s.tasks;
+          state.weights = Object.assign({}, DEFAULT_W, s.weights || {});
+          state.examples = !!s.examples;
+          return;
+        }
+      }
+    } catch (e) {}
+    seed();
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function seed() {
+    state.examples = true;
+    state.tasks = [
+      { id: 1, name: 'Write the weekly internship report', type: 'Internship', hours: 1, due: isoPlus(1), impact: 4, skill: 1, unblock: 2, done: false },
+      { id: 2, name: 'Fix login validation bug in timesheet', type: 'Internship', hours: 1.5, due: isoPlus(3), impact: 3, skill: 2, unblock: 4, done: false },
+      { id: 3, name: 'Build weekly summary page', type: 'Internship', hours: 3, due: isoPlus(6), impact: 4, skill: 3, unblock: 3, done: false },
+      { id: 4, name: 'Certificate: practice set for Module 4', type: 'Certificate', hours: 2, due: isoPlus(21), impact: 5, skill: 5, unblock: 1, done: false },
+      { id: 5, name: 'Certificate: revise Module 3 notes', type: 'Certificate', hours: 1.5, due: '', impact: 4, skill: 4, unblock: 1, done: false }
+    ];
+  }
+
+  /* ---------- scoring ---------- */
+  function urgencyScore(days) {
+    if (days === null) return 1;
+    if (days <= 1) return 5;
+    if (days <= 3) return 4;
+    if (days <= 7) return 3;
+    if (days <= 14) return 2;
+    return 1;
+  }
+  function quickScore(h) {
+    if (h <= 1) return 5;
+    if (h <= 2) return 4;
+    if (h <= 4) return 3;
+    if (h <= 8) return 2;
+    return 1;
+  }
+  function fmtH(h) { return String(Math.round(h * 100) / 100).replace(/\.0+$/, '') + ' h'; }
+
+  function evaluate(t) {
+    var w = state.weights;
+    var sumW = KEYS.reduce(function (a, k) { return a + (+w[k] || 0); }, 0);
+    var days = daysUntil(t.due);
+    var s = { urgency: urgencyScore(days), impact: +t.impact, skill: +t.skill, unblock: +t.unblock, quick: quickScore(+t.hours) };
+    var parts = {}, lost = {}, total = 0;
+    KEYS.forEach(function (k) {
+      var share = sumW > 0 ? (+w[k] || 0) / sumW : 0.2;
+      parts[k] = share * (s[k] / 5) * 100;
+      lost[k] = share * ((5 - s[k]) / 5) * 100;
+      total += parts[k];
+    });
+    return { s: s, parts: parts, lost: lost, benefit: Math.round(total), days: days };
+  }
+
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+
+  function reasonFor(k, t, ev) {
+    var s = ev.s[k], d = ev.days;
+    if (k === 'urgency') {
+      if (d === null) return 'No deadline is set, so nothing forces it today.';
+      if (d < 0) return 'Overdue by ' + plural(-d, 'day') + '.';
+      if (d === 0) return 'Due today.';
+      return s >= 4 ? 'Due in ' + plural(d, 'day') + ', so putting it off gets costly soon.' : 'Due in ' + plural(d, 'day') + ', so there is still some room.';
+    }
+    if (k === 'impact') return s >= 4 ? 'Big effect on your result (' + s + '/5).' : s === 3 ? 'Moderate effect on your result (3/5).' : 'Small effect on your result (' + s + '/5).';
+    if (k === 'skill') return s >= 4 ? 'Builds skills you will keep using (' + s + '/5).' : s === 3 ? 'Some new skills along the way (3/5).' : 'Little new learning (' + s + '/5).';
+    if (k === 'unblock') return s >= 4 ? 'Other people or tasks are waiting on it (' + s + '/5).' : s === 3 ? 'Some work depends on it (3/5).' : 'Nobody is waiting on it (' + s + '/5).';
+    return s >= 4 ? 'Only ' + fmtH(+t.hours) + ', short enough to finish in one sitting.' : s === 3 ? fmtH(+t.hours) + ' of work, a half-day job at most.' : fmtH(+t.hours) + ' is a long job, which lowers its score.';
+  }
+  function gapFor(k, t, ev) {
+    var s = ev.s[k];
+    if (k === 'urgency') return ev.days === null ? 'Held back by having no deadline.' : 'Held back because the deadline is ' + plural(ev.days, 'day') + ' away.';
+    if (k === 'impact') return 'Held back by low impact (' + s + '/5).';
+    if (k === 'skill') return 'Held back by little skill growth (' + s + '/5).';
+    if (k === 'unblock') return 'Held back because nobody is waiting on it (' + s + '/5).';
+    return 'Held back because ' + fmtH(+t.hours) + ' is a long task.';
+  }
+  function reasons(t, ev) {
+    var order = KEYS.slice().sort(function (a, b) { return ev.parts[b] - ev.parts[a]; });
+    var out = order.slice(0, 3).filter(function (k) { return ev.parts[k] > 0; }).map(function (k) {
+      return { text: reasonFor(k, t, ev), gap: false, pts: Math.round(ev.parts[k]) };
+    });
+    var worst = KEYS.slice().sort(function (a, b) { return ev.lost[b] - ev.lost[a]; })[0];
+    if (ev.lost[worst] >= 6 && ev.s[worst] <= 3) out.push({ text: gapFor(worst, t, ev), gap: true });
+    return out;
+  }
+
+  function ranked() {
+    var act = state.tasks.filter(function (t) { return !t.done; }).map(function (t) { return { t: t, ev: evaluate(t) }; });
+    act.sort(function (a, b) {
+      if (b.ev.benefit !== a.ev.benefit) return b.ev.benefit - a.ev.benefit;
+      var da = a.ev.days === null ? 9999 : a.ev.days, db = b.ev.days === null ? 9999 : b.ev.days;
+      if (da !== db) return da - db;
+      return +a.t.hours - +b.t.hours;
+    });
+    return act;
+  }
+
+  /* ---------- html helpers ---------- */
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function dueChip(ev) {
+    var d = ev.days;
+    if (d === null) return '<span class="chip">No deadline</span>';
+    if (d < 0) return '<span class="chip urgent">Overdue ' + (-d) + 'd</span>';
+    if (d === 0) return '<span class="chip urgent">Due today</span>';
+    return '<span class="chip' + (d <= 2 ? ' urgent' : '') + '">Due in ' + d + 'd</span>';
+  }
+
+  function reasonsHtml(rs) {
+    return '<ul class="reasons">' + rs.map(function (r) { return '<li' + (r.gap ? ' class="gap"' : '') + '>' + esc(r.text) + '</li>'; }).join('') + '</ul>';
+  }
+
+  function breakdownHtml(ev) {
+    return '<div class="fb">' + KEYS.map(function (k) {
+      return '<div><span>' + LABELS[k] + '</span><span class="track"><i style="width:' + (ev.s[k] * 20) + '%"></i></span><span class="num">' + ev.s[k] + '/5 &middot; +' + Math.round(ev.parts[k]) + ' pts</span></div>';
+    }).join('') + '</div>';
+  }
+
+  /* ---------- render ---------- */
+  function renderPick(list) {
+    var el = document.getElementById('pick');
+    if (!list.length) {
+      el.innerHTML = '<div class="panel"><h2>Nothing left to do</h2><p class="sub">Every task is done. Use the free hours for your certificate, or add a new task.</p></div>';
+      return;
+    }
+    var top = list[0], rs = reasons(top.t, top.ev);
+    var next = list[1];
+    el.innerHTML =
+      '<div class="pick">' +
+        '<div class="pick-grid">' +
+          '<div><p class="eyebrow">Start with this</p><h2>' + esc(top.t.name) + '</h2>' + reasonsHtml(rs) + '</div>' +
+          '<div class="bigpct">' + top.ev.benefit + '%<span>benefit</span></div>' +
+        '</div>' +
+        '<div class="pick-foot">' +
+          '<span>' + (next ? 'Next up: ' + esc(next.t.name) + ' (' + next.ev.benefit + '%)' : 'This is your only open task.') + '</span>' +
+          '<button class="btn on-pick small" type="button" data-act="done" data-id="' + top.t.id + '">Mark done</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function rowHtml(item, i, isDone) {
+    var t = item.t, ev = item.ev;
+    var open = !!openIds[t.id];
+    var cls = 'row' + (i === 0 && !isDone ? ' first' : '') + (isDone ? ' isdone' : '');
+    var rs = reasons(t, ev);
+    return '<li class="' + cls + '">' +
+      '<div class="rank">' + (isDone ? '&#10003;' : (i + 1)) + '</div>' +
+      '<div style="min-width:0">' +
+        '<div class="titleline"><span class="name">' + esc(t.name) + '</span><span class="chip">' + esc(t.type) + '</span>' + (isDone ? '<span class="chip done">Done</span>' : dueChip(ev)) + '<span class="chip">' + fmtH(+t.hours) + '</span></div>' +
+        (isDone ? '' : '<div class="meter"><i style="width:' + ev.benefit + '%"></i></div>' +
+        '<button class="why" type="button" data-act="toggle" data-id="' + t.id + '" aria-expanded="' + open + '">Why ' + ev.benefit + '%?</button>') +
+      '</div>' +
+      (isDone ? '<div></div>' : '<div class="pct">' + ev.benefit + '<small>%</small></div>') +
+      (isDone ? '' : '<div class="detail"' + (open ? '' : ' hidden') + '>' + reasonsHtml(rs) + breakdownHtml(ev) +
+        '<div class="acts"><button class="btn small" type="button" data-act="done" data-id="' + t.id + '">Mark done</button><button class="btn small" type="button" data-act="edit" data-id="' + t.id + '">Edit</button><button class="btn small danger" type="button" data-act="del" data-id="' + t.id + '">Delete</button></div></div>') +
+      (isDone ? '<div class="detail" style="grid-column:2/-1;padding:0"><div class="acts"><button class="btn small" type="button" data-act="done" data-id="' + t.id + '">Mark not done</button><button class="btn small danger" type="button" data-act="del" data-id="' + t.id + '">Delete</button></div></div>' : '') +
+    '</li>';
+  }
+
+  function renderList(list) {
+    var rows = document.getElementById('rows');
+    rows.innerHTML = list.length ? list.map(function (it, i) { return rowHtml(it, i, false); }).join('') : '<li class="empty">No open tasks. Add one with the form.</li>';
+    var done = state.tasks.filter(function (t) { return t.done; }).map(function (t) { return { t: t, ev: evaluate(t) }; });
+    document.getElementById('done-wrap').hidden = !done.length;
+    document.getElementById('done-rows').innerHTML = done.map(function (it, i) { return rowHtml(it, i, true); }).join('');
+  }
+
+  function fmtTime(m) {
+    var h = Math.floor(m / 60), mm = m % 60, ap = h >= 12 ? 'pm' : 'am';
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    return h12 + ':' + pad(mm) + ' ' + ap;
+  }
+
+  function renderPlan(list) {
+    var START = 540, END = 1080, L1 = 780, L2 = 840;
+    var cur = START, blocks = [], skipped = [], used = 0;
+    list.forEach(function (it) {
+      var rem = Math.round(+it.t.hours * 60), c = cur, segs = [];
+      while (rem > 0 && c < END) {
+        if (c >= L1 && c < L2) c = L2;
+        var limit = c < L1 ? L1 : END;
+        var take = Math.min(rem, limit - c);
+        if (take <= 0) break;
+        segs.push([c, c + take]); c += take; rem -= take;
+      }
+      if (rem > 0) { skipped.push(it); return; }
+      segs.forEach(function (sg, i) { blocks.push({ kind: 'task', it: it, start: sg[0], end: sg[1], cont: i > 0 }); used += sg[1] - sg[0]; });
+      cur = c;
+    });
+    if (cur >= L1 && cur < L2) cur = L2;
+    var rows = blocks.slice();
+    rows.push({ kind: 'lunch', start: L1, end: L2 });
+    if (cur < L1) { rows.push({ kind: 'free', start: cur, end: L1 }); rows.push({ kind: 'free', start: L2, end: END }); }
+    else if (cur < END) rows.push({ kind: 'free', start: cur, end: END });
+    rows.sort(function (a, b) { return a.start - b.start; });
+
+    var freeMin = 480 - used;
+    document.getElementById('plan-summary').innerHTML = '<strong>' + fmtH(used / 60) + '</strong> planned, <strong>' + fmtH(freeMin / 60) + '</strong> free' + (freeMin >= 30 ? ' for certificate study.' : '.');
+
+    document.getElementById('plan').innerHTML = rows.map(function (r) {
+      var time = fmtTime(r.start) + '<br>' + fmtTime(r.end);
+      if (r.kind === 'lunch') return '<li class="lunch"><span class="t">' + time + '</span><div class="b">Lunch</div></li>';
+      if (r.kind === 'free') {
+        var mins = r.end - r.start;
+        if (mins < 15) return '';
+        return '<li class="free"><span class="t">' + time + '</span><div class="b">Free <small>' + fmtH(mins / 60) + ' &middot; study the certificate</small></div></li>';
+      }
+      return '<li><span class="t">' + time + '</span><div class="b">' + esc(r.it.t.name) + '<small>' + r.it.ev.benefit + '% benefit' + (r.cont ? ' &middot; continues' : '') + '</small></div></li>';
+    }).join('');
+
+    var nf = document.getElementById('nofit');
+    if (skipped.length) {
+      nf.hidden = false;
+      nf.textContent = 'Does not fit today: ' + skipped.map(function (it) { return it.t.name; }).join(', ') + '.';
+    } else nf.hidden = true;
+  }
+
+  function renderWeights() {
+    var sum = KEYS.reduce(function (a, k) { return a + (+state.weights[k] || 0); }, 0);
+    KEYS.forEach(function (k) {
+      var inp = document.getElementById('w-' + k);
+      inp.value = state.weights[k];
+      var pct = sum > 0 ? Math.round((+state.weights[k] || 0) / sum * 100) : 0;
+      inp.nextElementSibling.textContent = pct + '%';
+    });
+  }
+
+  function render() {
+    var list = ranked();
+    renderPick(list);
+    renderList(list);
+    renderPlan(list);
+    document.getElementById('examples-banner').hidden = !state.examples;
+  }
+
+  /* ---------- form ---------- */
+  var f = {
+    name: document.getElementById('f-name'), type: document.getElementById('f-type'), hours: document.getElementById('f-hours'),
+    due: document.getElementById('f-due'), impact: document.getElementById('f-impact'), skill: document.getElementById('f-skill'), unblock: document.getElementById('f-unblock')
+  };
+  function syncOutputs() {
+    ['impact', 'skill', 'unblock'].forEach(function (k) { f[k].nextElementSibling.textContent = f[k].value; });
+  }
+  function resetForm() {
+    editingId = null;
+    f.name.value = ''; f.type.value = 'Internship'; f.hours.value = 2; f.due.value = '';
+    f.impact.value = 3; f.skill.value = 3; f.unblock.value = 1;
+    syncOutputs();
+    document.getElementById('form-title').textContent = 'Add a task';
+    document.getElementById('f-submit').textContent = 'Add task';
+    document.getElementById('f-cancel').hidden = true;
+    document.getElementById('form-error').hidden = true;
+  }
+  ['impact', 'skill', 'unblock'].forEach(function (k) { f[k].addEventListener('input', syncOutputs); });
+
+  document.getElementById('task-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = f.name.value.trim();
+    if (!name) { document.getElementById('form-error').hidden = false; f.name.focus(); return; }
+    var hrs = parseFloat(f.hours.value);
+    if (!(hrs > 0)) hrs = 1;
+    var data = { name: name, type: f.type.value, hours: Math.min(hrs, 8), due: f.due.value, impact: +f.impact.value, skill: +f.skill.value, unblock: +f.unblock.value };
+    if (editingId !== null) {
+      state.tasks = state.tasks.map(function (t) { return t.id === editingId ? Object.assign({}, t, data) : t; });
+    } else {
+      state.tasks.push(Object.assign({ id: Date.now(), done: false }, data));
+    }
+    save(); resetForm(); render();
+  });
+  document.getElementById('f-cancel').addEventListener('click', resetForm);
+
+  /* ---------- list actions ---------- */
+  document.getElementById('main-col').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]');
+    if (!b) return;
+    var id = +b.getAttribute('data-id'), act = b.getAttribute('data-act');
+    var t = state.tasks.filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    if (act === 'toggle') { openIds[id] = !openIds[id]; render(); return; }
+    if (act === 'done') { t.done = !t.done; save(); render(); return; }
+    if (act === 'del') { state.tasks = state.tasks.filter(function (x) { return x.id !== id; }); save(); render(); return; }
+    if (act === 'edit') {
+      editingId = id;
+      f.name.value = t.name; f.type.value = t.type; f.hours.value = t.hours; f.due.value = t.due || '';
+      f.impact.value = t.impact; f.skill.value = t.skill; f.unblock.value = t.unblock;
+      syncOutputs();
+      document.getElementById('form-title').textContent = 'Edit task';
+      document.getElementById('f-submit').textContent = 'Save changes';
+      document.getElementById('f-cancel').hidden = false;
+      try { f.name.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) {}
+      f.name.focus();
+    }
+  });
+
+  document.getElementById('clear-examples').addEventListener('click', function () {
+    state.tasks = []; state.examples = false; openIds = {}; save(); resetForm(); render();
+  });
+
+  /* ---------- weights ---------- */
+  KEYS.forEach(function (k) {
+    document.getElementById('w-' + k).addEventListener('input', function (e) {
+      state.weights[k] = +e.target.value; save(); renderWeights(); render();
+    });
+  });
+  document.getElementById('w-reset').addEventListener('click', function () {
+    state.weights = Object.assign({}, DEFAULT_W); save(); renderWeights(); render();
+  });
+
+  /* ---------- boot ---------- */
+  load();
+  document.getElementById('today-label').textContent = startOfToday().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  renderWeights();
+  resetForm();
+  render();
+})();
+</script>
+
+</body></html>
